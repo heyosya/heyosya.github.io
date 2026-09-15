@@ -1,0 +1,16 @@
+{
+  "name": "Ося. Учимся писать",
+  "short_name": "Ося",
+  "lang": "ru",
+  "description": "Занятие на несколько минут: осьминог Ося учит дошкольника писать буквы.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d5c78",
+  "theme_color": "#2aa3ad",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
