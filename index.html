@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Ося</title>
+    <!--
+      Единый исходник иконки — `assets/source/osya-logo.png`; из него без кадрирования
+      собраны PNG 180, 192 и 512 пикселей. iOS берёт первый, Android — размеры
+      из манифеста, браузерный favicon — 192. SVG здесь намеренно нет, чтобы
+      платформа не выбрала прежнее изображение вместо нового.
+
+      ИМЯ ФАЙЛА НЕ ПРОИЗВОЛЬНОЕ. Первый вариант звался icon-180.png, и на
+      телефоне ярлык всё равно вышел серым квадратом с буквой. Сам PNG при
+      этом оказался в порядке — 180×180, без прозрачности, цвета на месте, —
+      то есть iOS его не забрал, а не не понял. `apple-touch-icon.png` в корне
+      сайта iOS запрашивает САМ, по соглашению, даже когда до тега дело не
+      дошло. Два пути к одной картинке вместо одного.
+    -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <!--
+      Карта стартует в момент разбора разметки, а не после скачивания и запуска
+      бандла. На публикации канал узкий (замер 2026-08-23: ~21 КБ/с), и без
+      этих двух строк фон с рукой ждали бы окончания JS в 132 КБ — заставка
+      уходила бы раньше, и меню вставало бы на градиенте. Планы:
+      ai-context/plans/2026-08-23-holodnyj-start-publikacii.md.
+
+      Путь абсолютный, как у соседних тегов: Vite переписывает его под подпуть
+      сборки. Прелоад без последующего запроса ругается в консоль — оба файла
+      дальше запрашиваются по делу (`ui/app/background.ts`), потому подсказка
+      честная.
+    -->
+    <link rel="preload" as="image" href="/backgrounds/underwater-portrait.webp" media="(orientation: portrait)" />
+    <link rel="preload" as="image" href="/backgrounds/underwater-landscape.webp" media="(orientation: landscape)" />
+    <link rel="preload" as="image" href="/models/osya-poster.png" />
+    <link rel="preload" as="image" href="/hand.png" />
+    <!--
+      Манифест. Он и есть то, чем Android отличает приложение от закладки:
+      имя ярлыка и иконку он берёт отсюда, а не из тегов Apple выше.
+
+      ПУТЬ АБСОЛЮТНЫЙ, И ЭТО НЕ ОШИБКА ПОДПУТИ. Vite переписывает `/файл` в
+      разметке под `base` сборки — ровно так же, как соседний
+      apple-touch-icon. Сейчас публикация стоит в корне домена; при будущем
+      переезде в подпуть Vite добавит его сам. А пути ВНУТРИ манифеста
+      относительные: их Vite не трогает, `public/` копируется как есть, и они
+      разрешаются от адреса самого манифеста.
+
+      Service worker теперь есть только ради Web Push: `public/sw.js`. Он не
+      обрабатывает `fetch` и ничего не кеширует, поэтому работы без сети здесь
+      по-прежнему не обещано. Ярлык ставится через меню браузера, подсказку
+      показывает `ui/adult-overlays/InstallPrompt.tsx`.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#2aa3ad" />
+    <meta name="apple-mobile-web-app-title" content="Ося" />
+    <!--
+      Ярлык открывается без адресной строки Safari.
+
+      Добавлено 2026-08-05, когда иконка не появилась и с правильным именем
+      файла: этим тегом iOS трактует страницу как приложение, а не как
+      закладку, и иконку для неё ищет всерьёз.
+
+      Побочный эффект тут полезный и он не случайно принят: ребёнок не выйдет
+      из занятия случайным касанием адресной строки. Настоящий PWA (манифест,
+      работа без сети) по-прежнему Ф1.4 — это не он.
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!--
+      Стили собираются из частей: `src/ui/styles/` и точка входа `index.scss`.
+      Ссылка ведёт прямо на неё, а не на собранный файл: Vite сам зовёт sass и
+      в разработке, и в сборке. Тег остаётся в шапке намеренно — уедь он в
+      main.ts, стили пришли бы вместе со скриптом, и первый кадр был бы без
+      них.
+    -->
+    <script type="module" crossorigin src="/assets/index-DJA4z98m.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-UvX4ZfXb.css">
+  </head>
+  <body>
+    <div id="bg"></div>
+    <!-- Единственный React-root владеет разметкой всех пользовательских
+         экранов. Canvas, SVG и Three.js подключаются к его узлам узкими
+         адаптерами и освобождаются вместе с деревом. -->
+    <div id="reactApp"></div>
+
+    <!-- Панель взрослого. Кнопка мелкая и подписана точками: ребёнок сюда
+         не попадает, а взрослому она нужна в любом положении телефона. -->
+    <span id="recording" aria-hidden="true"></span>
+    <!--
+      Вход в панель замера. ВИДЕН ТОЛЬКО ПРИ ОТЛАДОЧНОМ ВХОДЕ — адрес с `#dev`
+      или сборка для разработки, см. `ui/developer/dev.ts`. До 2026-08-21 он висел здесь
+      всегда, и ребёнок попадал из него туда, где стирают память.
+    -->
+    <button id="cfgBtn" type="button" aria-label="панель замера">···</button>
+
+    <div id="panel">
+      <h3>Память Оси</h3>
+      <pre id="mem"></pre>
+
+      <h3>Занятие сейчас</h3>
+      <pre id="now"></pre>
+
+      <!-- Петля: цель, три счётчика критерия отказа Ф1.3 и дневная норма.
+           Без этих строк ни цель, ни норму на устройстве не видно никак. -->
+      <h3>Петля: цель и норма</h3>
+      <pre id="loop"></pre>
+
+      <h3>Доля принятых по буквам — критерий отказа Ф1.2</h3>
+      <pre id="rates"></pre>
+
+      <h3>Последняя попытка</h3>
+      <pre id="last">попыток не было</pre>
+
+      <h3>По дням</h3>
+      <pre id="journal">пусто</pre>
+
+      <div class="row">
+        <button id="againBtn" type="button">Начать занятие заново</button>
+        <button id="stopBtn" type="button">Завершить сейчас</button>
+      </div>
+      <div class="row">
+        <button id="handBtn" type="button">рука: правая</button>
+      </div>
+
+      <h3>Калибровка: сырые точки штриха</h3>
+      <div class="row">
+        <button id="calibBtn" type="button">Калибровка: выключена</button>
+      </div>
+      <pre id="calibInfo"></pre>
+      <div class="row">
+        <button id="calibExport" type="button">Выгрузить файлом</button>
+        <button id="calibClear" type="button" class="warn">Стереть записи</button>
+      </div>
+
+      <h3>Проверка</h3>
+      <pre id="diag"></pre>
+
+      <div class="row">
+        <button id="backdateBtn" type="button">Память: «это было вчера»</button>
+        <button id="forgetBtn" type="button" class="warn">Забыть всё</button>
+      </div>
+      <!-- Вход в заметку из панели замера. Главные входы теперь два: заставка
+           и настройки; этот остаётся, чтобы из панели не приходилось выходить
+           ради заметки. -->
+      <div class="row">
+        <button id="parentsPanelLink" type="button">Родителям: что считает приложение</button>
+      </div>
+      <div class="row">
+        <button id="closeBtn" type="button">Закрыть</button>
+      </div>
+    </div>
+
+    <audio id="snd" preload="auto"></audio>
+  </body>
+</html>
