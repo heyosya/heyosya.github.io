@@ -1,0 +1,45 @@
+name: Diagnose heyosya.ru DNS
+on:
+  workflow_dispatch:
+permissions: {}
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Read-only DNS and strict HTTPS checks
+        shell: python
+        run: |
+          import concurrent.futures
+          import datetime
+          import subprocess
+
+          print('UTC:', datetime.datetime.now(datetime.timezone.utc).isoformat())
+          def check(cmd):
+              try:
+                  p = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+                  return '$ ' + ' '.join(cmd) + '\n' + p.stdout + p.stderr + '\nexit=' + str(p.returncode)
+              except subprocess.TimeoutExpired:
+                  return '$ ' + ' '.join(cmd) + '\nprocess timeout'
+
+          queries = [
+              ('heyosya.ru', 'A'),
+              ('_github-pages-challenge-heyosya.heyosya.ru', 'TXT'),
+              ('heyosya.ru', 'CAA'),
+              ('www.heyosya.ru', 'CAA'),
+          ]
+          jobs = []
+          for server in [None, 'ns1.reg.ru', 'ns2.reg.ru', '1.1.1.1', '8.8.8.8']:
+              for name, record in queries:
+                  for mode in [[], ['+tcp'], ['+noedns'], ['+dnssec', '+bufsize=4096']]:
+                      jobs.append(['dig'] + (['@' + server] if server else []) + [name, record, '+time=2', '+tries=1', '+noall', '+answer', '+authority', '+comments'] + mode)
+          for server in [None, '1.1.1.1', '8.8.8.8']:
+              for mode in [[], ['+tcp']]:
+                  jobs.append(['dig'] + (['@' + server] if server else []) + ['github.com', 'A', '+time=2', '+tries=1', '+noall', '+answer', '+comments'] + mode)
+          for ns in ['ns1.reg.ru', 'ns2.reg.ru']:
+              jobs.append(['dig', ns, 'A', '+short', '+time=2', '+tries=1'])
+          for url in ['http://heyosya.ru/', 'https://heyosya.ru/', 'https://www.heyosya.ru/', 'https://heyosya.ru/voice/open.m4a']:
+              jobs.append(['curl', '-sS', '-I', '--max-time', '10', url])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              for result in pool.map(check, jobs):
+                  print(result, flush=True)
