@@ -5,41 +5,44 @@ permissions: {}
 jobs:
   dns:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 6
     steps:
-      - name: Read-only DNS and strict HTTPS checks
-        shell: python
+      - name: Install official Pages DNS checker
         run: |
-          import concurrent.futures
-          import datetime
-          import subprocess
-
-          print('UTC:', datetime.datetime.now(datetime.timezone.utc).isoformat())
-          def check(cmd):
-              try:
-                  p = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
-                  return '$ ' + ' '.join(cmd) + '\n' + p.stdout + p.stderr + '\nexit=' + str(p.returncode)
-              except subprocess.TimeoutExpired:
-                  return '$ ' + ' '.join(cmd) + '\nprocess timeout'
-
-          queries = [
-              ('heyosya.ru', 'A'),
-              ('_github-pages-challenge-heyosya.heyosya.ru', 'TXT'),
-              ('heyosya.ru', 'CAA'),
-              ('www.heyosya.ru', 'CAA'),
-          ]
-          jobs = []
-          for server in [None, 'ns1.reg.ru', 'ns2.reg.ru', '1.1.1.1', '8.8.8.8']:
-              for name, record in queries:
-                  for mode in [[], ['+tcp'], ['+noedns'], ['+dnssec', '+bufsize=4096']]:
-                      jobs.append(['dig'] + (['@' + server] if server else []) + [name, record, '+time=2', '+tries=1', '+noall', '+answer', '+authority', '+comments'] + mode)
-          for server in [None, '1.1.1.1', '8.8.8.8']:
-              for mode in [[], ['+tcp']]:
-                  jobs.append(['dig'] + (['@' + server] if server else []) + ['github.com', 'A', '+time=2', '+tries=1', '+noall', '+answer', '+comments'] + mode)
-          for ns in ['ns1.reg.ru', 'ns2.reg.ru']:
-              jobs.append(['dig', ns, 'A', '+short', '+time=2', '+tries=1'])
-          for url in ['http://heyosya.ru/', 'https://heyosya.ru/', 'https://www.heyosya.ru/', 'https://heyosya.ru/voice/open.m4a']:
-              jobs.append(['curl', '-sS', '-I', '--max-time', '10', url])
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-              for result in pool.map(check, jobs):
-                  print(result, flush=True)
+          ruby --version
+          gem install --user-install --no-document github-pages-health-check
+      - name: Query with Pages resolver library
+        shell: bash
+        run: |
+          ruby <<'RUBY'
+          require 'github-pages-health-check'
+          require 'json'
+          require 'time'
+          puts JSON.generate({utc: Time.now.utc.iso8601, versions: Gem.loaded_specs.select { |k,_| ['github-pages-health-check','dnsruby'].include?(k) }.transform_values { |v| v.version.to_s }})
+          modes = [:default, :public, ['ns1.reg.ru'], ['ns2.reg.ru']]
+          names = ['heyosya.ru', 'www.heyosya.ru']
+          modes.each do |mode|
+            names.each do |name|
+              r = GitHubPages::HealthCheck::Resolver.new(name, nameservers: mode)
+              ['A','AAAA','CNAME','MX','NS','SOA','CAA'].each do |type|
+                begin
+                  answer = r.query(type).map(&:to_s)
+                  puts JSON.generate({name: name, type: type, resolver: mode, ok: true, answer: answer})
+                rescue StandardError => e
+                  puts JSON.generate({name: name, type: type, resolver: mode, ok: false, error: e.class.name, message: e.message})
+                end
+              end
+            end
+            begin
+              r = GitHubPages::HealthCheck::Resolver.new('_github-pages-challenge-heyosya.heyosya.ru', nameservers: mode)
+              puts JSON.generate({name: '_github-pages-challenge-heyosya.heyosya.ru', type: 'TXT', resolver: mode, ok: true, answer: r.query('TXT').map(&:to_s)})
+            rescue StandardError => e
+              puts JSON.generate({type: 'TXT', resolver: mode, ok: false, error: e.class.name, message: e.message})
+            end
+          end
+          RUBY
+      - name: Strict HTTPS result
+        run: |
+          for url in https://heyosya.ru/ https://www.heyosya.ru/ https://heyosya.ru/voice/open.m4a; do
+            curl -sS -I --max-time 15 "$url" || true
+          done
